@@ -50,9 +50,30 @@ Skate 3/
 4. Start the game. Your songs are now the game's playlist, with their own titles and artists
    in the game's playlist editor.
 
+While it works, a spinning status line at the bottom shows the current step, a timer and
+(while converting) about how long is left. If the line stops spinning, something outside the
+script is holding it up; see [Troubleshooting](#troubleshooting).
+
 To change songs, add or remove files in `My Music` and run the installer again. Songs that
 were converted before are reused, so only new songs take time. A first run with 43 songs
 took about 2 minutes on an M-series Mac.
+
+### More than 46 songs
+
+Skate 3's playlist has **46 slots**. That number is built into the game's code (the list of
+46 soundtrack entries is compiled into the executable, and the playlist menus and saved
+playlists are built around it), so the mod can't add more entries. When you have more songs,
+the installer asks what to do:
+
+1. **Pick which songs to leave out.** It lists your songs by number; type the numbers. The
+   songs you pick are moved to `My Music/Left out`, so the choice sticks. Move a file back
+   into `My Music` to put it back in the playlist.
+2. **Two songs in a slot**, so up to 92 songs fit. Only as many slots as needed get a second
+   song, preferably two by the same artist. Both play back to back and the playlist shows
+   them as "Song A / Song B". They're switched on/off and skipped together.
+3. **Leave out the last ones** alphabetically.
+
+From a terminal you can skip the question with `--fit pair` or `--fit trim`.
 
 **Other scripts** in `music_mod`:
 
@@ -63,13 +84,18 @@ took about 2 minutes on an M-series Mac.
 
 **Good to know**
 
-- The playlist has **46 slots**. With fewer songs, they repeat to fill the slots; with more,
-  the first 46 (sorted by artist, then title) are used and the script lists the rest.
+- With fewer than 46 songs, they repeat to fill the slots.
 - Every song is loudness-matched to the game's own music, so nothing is suddenly loud or quiet.
 - The first install backs up the three game files it changes to `backup/game/`. Uninstall
   restores them from there.
-- Converted songs are kept in `mod_build/pcm_cache` (about 10 MB per minute of music) so
-  reinstalling is fast. You can delete `mod_build` any time; it's rebuilt when needed.
+- Converted songs are cached (about 10 MB per minute of music) so reinstalling is fast, in a
+  local folder that never syncs to the cloud: `~/Library/Caches/Skate3MusicMod` on a Mac,
+  `%LOCALAPPDATA%\Skate3MusicMod` on Windows, `~/.cache/Skate3MusicMod` on Linux. You can
+  delete it any time; it's rebuilt when needed. (Older versions used a `mod_build` folder next
+  to the game; that one can be deleted.)
+- **Keep the Skate 3 folder out of iCloud Drive / OneDrive** (for example, not in Documents
+  if Documents syncs). When the disk is low, the system moves synced files to the cloud and
+  the script and the game have to wait for downloads. The script warns you when this applies.
 
 ### Requirements for the music script
 
@@ -150,7 +176,8 @@ normal build includes it; then use `python3 music_mod/skate3_music.py`.
 | `Could not find the Skate 3 game folder` | Keep `music_mod` next to the `game` folder, or run `python skate3_music.py --game "path\to\game"` |
 | `Skate 3 is running` | Close the game first; the files can't be replaced while it runs |
 | Playlist shows your song names but plays other music | You're running the official build. Run the one built from this fork |
-| Songs missing from the playlist | Only 46 fit; the script prints which ones were left out |
+| Songs missing from the playlist | Only 46 slots; check `My Music/Left out`, or reinstall and choose "two songs in a slot" |
+| Script looks frozen / status line stops moving | Usually the Skate 3 folder is in iCloud Drive or OneDrive and files are being downloaded back from the cloud. Move the folder somewhere that doesn't sync, or right-click it → Keep Downloaded (Mac) / Always keep on this device (Windows). On Windows, also check you didn't click inside the window: that pauses it until you press a key (the script turns this off while it runs) |
 | Want the original soundtrack back | Run `Uninstall Music Mod` |
 
 ## How it works
