@@ -91,8 +91,9 @@ From a terminal you can skip the question with `--fit pair` or `--fit trim`.
 - Converted songs are cached (about 10 MB per minute of music) so reinstalling is fast, in a
   local folder that never syncs to the cloud: `~/Library/Caches/Skate3MusicMod` on a Mac,
   `%LOCALAPPDATA%\Skate3MusicMod` on Windows, `~/.cache/Skate3MusicMod` on Linux. You can
-  delete it any time; it's rebuilt when needed. (Older versions used a `mod_build` folder next
-  to the game; that one can be deleted.)
+  delete it any time; it's rebuilt when needed. It also keeps a copy of the few original game
+  music files the build reads (about 400 MB), so rebuilds never wait on iCloud. (Older
+  versions used a `mod_build` folder next to the game; that one can be deleted.)
 - **Keep the Skate 3 folder out of iCloud Drive / OneDrive** (for example, not in Documents
   if Documents syncs). When the disk is low, the system moves synced files to the cloud and
   the script and the game have to wait for downloads. The script warns you when this applies.

@@ -713,11 +713,33 @@ class Layout:
         self.backup = self.root / "backup" / "game"
         self.stage = self.work  # mirrors the game folder
         self.cache = self.work / "pcm_cache"
+        self.originals = self.work / "originals"
 
     def original(self, rel):
         """The game's original copy of a file the mod replaces."""
         b = self.backup / rel
         return b if b.exists() else self.game / rel
+
+    def local(self, rel):
+        """A copy of one of the game's original files in the local cache folder, so builds
+        never wait on a cloud folder that has offloaded it (made once, re-made if it changes)."""
+        src = self.original(rel)
+        if (rel not in MODDED_FILES and is_offloaded(src) and (self.game / rel).is_file()
+                and not is_offloaded(self.game / rel)):
+            src = self.game / rel  # the mod never changes it, so either copy will do
+        dst = self.originals / rel
+        try:
+            if dst.stat().st_size == src.stat().st_size:
+                return dst
+        except OSError:
+            pass
+        status.set(f"Making a local copy of the game's {Path(rel).name} (only needed once)" +
+                   (" - downloading it from iCloud first" if is_offloaded(src) else ""))
+        dst.parent.mkdir(parents=True, exist_ok=True)
+        tmp = dst.with_name(dst.name + ".part")
+        shutil.copyfile(src, tmp)
+        os.replace(tmp, dst)
+        return dst
 
 
 def default_work_dir():
@@ -844,6 +866,14 @@ def check_backups(lay):
                 "\nReinstall the game files from your ISO, then run this again.")
 
 
+def replace_file(src, dst):
+    """Copy src over dst without opening dst: a cloud folder would otherwise download the
+    old file first just to overwrite it."""
+    tmp = dst.with_name(dst.name + ".skate3mod-new")
+    shutil.copyfile(src, tmp)
+    os.replace(tmp, dst)
+
+
 def link_or_copy(src, dst, allow_link=True):
     if dst.exists() or dst.is_symlink():
         dst.unlink()
@@ -887,16 +917,10 @@ def build(lay, jobs, fit="ask"):
     slot_samples = [p.stat().st_size // 4 for p in slot_pcm]
 
     say("Building the playlist...")
-    status.set("Building the playlist: reading the game's music files")
     rng = random.Random(1234)
-    music_dir = lay.game / "data/audio/music"
     # pool of donor chunks (stereo 44.1k EA-XMA), largest first
-    sources = []
-    for path in (lay.original("data/audio/music/Ipod_Stream.mus"),
-                 music_dir / "World_Stream.mus", music_dir / "Game_Stream.mus"):
-        if is_offloaded(path):
-            status.set(f"Building the playlist: downloading {path.name} from iCloud")
-        sources.append(Mus(path))
+    sources = [Mus(lay.local(f"data/audio/music/{name}"))
+               for name in ("Ipod_Stream.mus", "World_Stream.mus", "Game_Stream.mus")]
     pool = []
     for si, m in enumerate(sources):
         for i in range(m.count):
@@ -908,7 +932,8 @@ def build(lay, jobs, fit="ask"):
 
     # keys of every original packet, so tagged keys never collide with real music
     taken = set()
-    for m in sources:
+    for si, m in enumerate(sources):
+        status.set(f"Building the playlist: indexing the game's music ({si + 1} of {len(sources)})")
         for i in range(m.count):
             _, _, sns = m.chunk(i)
             for off, _ in sns_packets(sns):
@@ -1023,7 +1048,7 @@ def build(lay, jobs, fit="ask"):
             f.write(sns)
         f.truncate((sns_offsets[-1] + len(new_chunks[-1][2]) + 0x7F) & ~0x7F)
 
-    new_mpf = rebuild_mpf(lay.original("data/audio/music/ipod.mpf").read_bytes(), chains,
+    new_mpf = rebuild_mpf(lay.local("data/audio/music/ipod.mpf").read_bytes(), chains,
                           [c[3] for c in new_chunks], sns_offsets, snr_end)
     (stage_music / "ipod.mpf").write_bytes(new_mpf)
 
@@ -1038,7 +1063,7 @@ def build(lay, jobs, fit="ask"):
 
     slot_text = [slot_strings(g) for g in slots]
     (lay.stage / "data/big/miscboot.big").write_bytes(
-        patch_strings(lay.original("data/big/miscboot.big"), slot_text))
+        patch_strings(lay.local("data/big/miscboot.big"), slot_text))
 
     with open(stage_cm / "slots.txt", "w", encoding="utf-8", newline="\n") as f:
         for k, g in enumerate(slots):
@@ -1066,7 +1091,7 @@ def install(lay):
             shutil.copy2(lay.game / rel, backup)
             say(f"Backed up the original {rel}")
     for rel in MODDED_FILES:
-        shutil.copyfile(lay.stage / rel, lay.game / rel)
+        replace_file(lay.stage / rel, lay.game / rel)
     dest = lay.game / "custom_music"
     if dest.exists():
         shutil.rmtree(dest)
@@ -1075,7 +1100,9 @@ def install(lay):
         shutil.copyfile(stage_cm / name, dest / name)
     # Hard links save space, but a cloud-synced folder gets real copies.
     allow_link = cloud_folder(lay.game) is None
-    for line in (stage_cm / "sources.txt").read_text(encoding="utf-8").splitlines():
+    lines = (stage_cm / "sources.txt").read_text(encoding="utf-8").splitlines()
+    for i, line in enumerate(lines):
+        status.set(f"Installing into the game folder (song file {i + 1} of {len(lines)})")
         k, pcm = line.split()
         link_or_copy(lay.cache / pcm, dest / f"slot{int(k):02d}.pcm", allow_link)
     say(f"Installed into {lay.game}")
@@ -1088,7 +1115,7 @@ def uninstall(lay):
     for rel in MODDED_FILES:
         backup = lay.backup / rel
         if backup.exists():
-            shutil.copy2(backup, lay.game / rel)
+            replace_file(lay.local(rel), lay.game / rel)
             restored += 1
     cm = lay.game / "custom_music"
     if cm.exists():
