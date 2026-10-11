@@ -1,0 +1,41 @@
+# Checks that the music mod builds on Windows. The full game can't be built here - that
+# needs your own Skate 3 game files (see MUSIC_MOD.md, packaging/build-windows.ps1) - but
+# all of the mod's runtime code (custom music, volume sliders) lives in the rexglue-sdk
+# runtime, which builds without them.
+name: Windows build check
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  runtime:
+    name: Build the modded runtime (Windows)
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Install toolchain
+        run: choco install llvm cmake ninja -y
+
+      - name: Set up sccache
+        uses: hendrikmuhs/ccache-action@v1.2.22
+        with:
+          variant: sccache
+          key: win-amd64-runtime
+
+      - name: Configure
+        working-directory: third_party/rexglue-sdk
+        run: cmake --preset win-amd64 -DCMAKE_C_COMPILER_LAUNCHER=sccache -DCMAKE_CXX_COMPILER_LAUNCHER=sccache
+
+      - name: Build rexruntime.dll
+        working-directory: third_party/rexglue-sdk
+        run: cmake --build out/build/win-amd64 --config Release --target rexruntime --parallel
+
+      - name: Music script smoke test
+        run: |
+          python music_mod/skate3_music.py --help
+          python -c "import sys; sys.path.insert(0, 'music_mod'); import skate3_music as m; assert m.packet_key(bytes(range(64))) == 0x63746fe645199ee8"

@@ -4,6 +4,10 @@
   <img alt="Skate 3 Native PC Recompilation" src="banner-light.png">
 </picture>
 
+> **This fork adds a custom music mod:** your own songs in the in-game playlist, Music and
+> Game Volume sliders in the settings menu (Esc → Audio), one-click install scripts, and
+> Windows/macOS build scripts. **See [MUSIC_MOD.md](MUSIC_MOD.md) for how to use it.**
+
 An unofficial native recompilation of the Xbox 360 version of Skate 3, supporting Windows, Linux, and macOS.
 
 As of v2.0.0, the game runs on a native renderer built directly on Direct3D 12 and Vulkan instead of emulating the Xbox 360 GPU. Compared to the emulated renderer it delivers more than twice the frame rate at roughly a quarter of the GPU power draw, and on Apple Silicon the frame rate uplift is closer to 10x.
