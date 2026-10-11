@@ -45,6 +45,7 @@ APP="$REPO/dist/skate3recomp.app"
 rm -rf "$APP"
 mkdir -p "$APP/Contents/MacOS"
 cp -f "$BUILD/skate3" "$BUILD/librexruntime.dylib" "$BUILD/libMoltenVK.dylib" "$APP/Contents/MacOS/"
+chmod u+w "$APP/Contents/MacOS/"*  # Homebrew's MoltenVK is read-only
 cat > "$APP/Contents/Info.plist" <<'EOF'
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
@@ -74,6 +75,15 @@ if [[ "$INSTALL" == "--install" ]]; then
   if [[ -d "$ROOT/skate3recomp.app" && ! -d "$ROOT/backup/skate3recomp.app.orig" ]]; then
     mkdir -p "$ROOT/backup"
     cp -R "$ROOT/skate3recomp.app" "$ROOT/backup/skate3recomp.app.orig"
+  fi
+  # Keep the MoltenVK the game already runs with (the release ships its own build of it).
+  OLD_MVK="$ROOT/skate3recomp.app/Contents/MacOS/libMoltenVK.dylib"
+  [[ -f "$OLD_MVK" ]] || OLD_MVK="$ROOT/backup/skate3recomp.app.orig/Contents/MacOS/libMoltenVK.dylib"
+  if [[ -f "$OLD_MVK" ]]; then
+    cp -f "$OLD_MVK" "$APP/Contents/MacOS/libMoltenVK.dylib"
+    chmod u+w "$APP/Contents/MacOS/libMoltenVK.dylib"
+    xattr -cr "$APP"
+    codesign --force --deep --sign - "$APP"
   fi
   rm -rf "$ROOT/skate3recomp.app"
   cp -R "$APP" "$ROOT/skate3recomp.app"
