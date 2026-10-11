@@ -306,21 +306,34 @@ def run_tool(args):
     return subprocess.run(args, capture_output=True, text=True, encoding="utf-8", errors="replace")
 
 
-def list_songs(music_dir):
+def list_songs(music_dir, cache_dir):
+    """Tags and length of every song. Remembered in cache_dir/songs.json (by file name and
+    size), so songs a cloud folder has offloaded don't need downloading just to be listed."""
+    known_path = cache_dir / "songs.json"
+    try:
+        known = json.loads(known_path.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        known = {}
     songs = []
+    seen = {}
     files = [f for f in sorted(music_dir.iterdir())
              if not f.name.startswith(".") and f.suffix.lower() in AUDIO_EXTENSIONS]
     for i, f in enumerate(files):
-        status.set(f"Reading your songs ({i + 1} of {len(files)})" +
-                   (" - downloading it from iCloud" if is_offloaded(f) else ""))
-        probe = run_tool(["ffprobe", "-v", "error", "-show_entries", "format=duration:format_tags",
-                          "-of", "json", str(f)])
-        try:
-            info = json.loads(probe.stdout)["format"]
-            duration = float(info["duration"])
-        except (ValueError, KeyError):
-            say(f"  skipping {f.name}: ffprobe could not read it")
-            continue
+        key = f"{f.name}|{f.stat().st_size}"
+        info = known.get(key)
+        if info is None:
+            status.set(f"Reading your songs ({i + 1} of {len(files)})" +
+                       (" - downloading it from iCloud" if is_offloaded(f) else ""))
+            probe = run_tool(["ffprobe", "-v", "error", "-show_entries",
+                              "format=duration:format_tags", "-of", "json", str(f)])
+            try:
+                info = json.loads(probe.stdout)["format"]
+                float(info["duration"])
+            except (ValueError, KeyError):
+                say(f"  skipping {f.name}: ffprobe could not read it")
+                continue
+        seen[key] = info
+        duration = float(info["duration"])
         t = {k.lower(): v for k, v in info.get("tags", {}).items()}
         artist, _, title = f.stem.partition(" - ")
         if not title:
@@ -333,6 +346,8 @@ def list_songs(music_dir):
             "duration": duration,
         })
     songs.sort(key=lambda s: (s["artist"].lower(), s["title"].lower()))
+    cache_dir.mkdir(parents=True, exist_ok=True)
+    known_path.write_text(json.dumps(seen, ensure_ascii=False), encoding="utf-8")
     return songs
 
 
@@ -853,7 +868,7 @@ def build(lay, jobs, fit="ask"):
     warn_cloud(lay)
     if (lay.root / "mod_build").is_dir():
         say(f"(The old {lay.root / 'mod_build'} folder isn't used anymore - you can delete it.)")
-    songs = list_songs(lay.music)
+    songs = list_songs(lay.music, lay.cache)
     if not songs:
         raise UserError(f"No songs found. Put your songs (mp3, m4a, flac, wav, ogg, opus, ...) "
                         f"in\n  {lay.music}\nand run this again.")
